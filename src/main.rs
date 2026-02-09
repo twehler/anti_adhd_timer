@@ -13,7 +13,7 @@ fn set_xsct(temp: &str) {
 
 // Function subtracts NaiveTime objects while wrapping around midnight
 fn calculate_time_duration(start: NaiveTime, end: NaiveTime) -> chrono::Duration {
-    let today = NaiveDate::from_ymd_opt(2026, 2, 6).unwrap(); // example fixed date
+    let today = NaiveDate::from_ymd_opt(2026, 2, 9).unwrap(); // example fixed date
 
     let start_dt = NaiveDateTime::new(today, start);
     let mut end_dt = NaiveDateTime::new(today, end);
@@ -25,6 +25,7 @@ fn calculate_time_duration(start: NaiveTime, end: NaiveTime) -> chrono::Duration
 
     end_dt - start_dt
 }
+
 
 
 // function promts a user-input and returns a NaiveTime object
@@ -143,8 +144,9 @@ fn main() {
     let mut task_end_reminder_sent = false;
 
     let mut pomodoro_start_reminder_sent = false;
-    let mut pomodoro_start_reminder_sent = false;
-    let mut pom_number: u16 = 1;
+    let mut pomodoro_pause_reminder_sent = false;
+    let mut pomodoro_count: u16 = 1; //printed out from the beginning, so value is 1
+    let mut total_pomodoro_count: u16 = 0;
 
     let mut current_screen_temp = "6500";
 
@@ -159,7 +161,7 @@ fn main() {
 
             if now >= t.beginning && !task_beginning_reminder_sent {
                 println!("Task {} started!", t.name);
-                pom_number = 1;
+
 
                 notify_rust::Notification::new()
                 .summary("Stop everything!")
@@ -169,7 +171,7 @@ fn main() {
                 .show()
                 .unwrap();
                 task_beginning_reminder_sent = true;
-                }
+            }
 
             // if there is a "next task", announce it to the user
             // get() safely accesses the next task, to prevent overflow
@@ -183,15 +185,14 @@ fn main() {
 
                         println!("Task {} has ended!", t.name);
                         notify_rust::Notification::new()
-                        .summary(&format!("Time for task {} is over.", t.name))
+                        .summary(&format!("Time for task {} is over. Time for 15 min. of workout or meditation.", t.name))
                         .body(&format!("The next task will be {} and it  will begin at {}.", next.name, next.beginning))
                         .icon("alarm-clock") // Standard Ubuntu icon name
                         .timeout(0)          // 0 means the notification won't disappear until clicked
                         .show()
                         .unwrap();
-
-                        task_end_reminder_sent = true;
                     },
+
                     None => {
                         println!("Task {} has ended!", t.name);
                         notify_rust::Notification::new()
@@ -200,52 +201,82 @@ fn main() {
                         .timeout(0)          // 0 means the notification won't disappear until clicked
                         .show()
                         .unwrap();
-                        task_end_reminder_sent = true;
                     }
-
                 }
+
+                task_end_reminder_sent = true;
+
                 // letting the screen blink in red for a short time
                 for elem in 0..4 {
                         set_xsct("1000");
                         std::thread::sleep(time::Duration::from_millis(300));
                         set_xsct(current_screen_temp);
                         std::thread::sleep(time::Duration::from_millis(300));
- 
+
                     }
-            }
+
+
+                // Implementing Pomodoro-Intervals (25min of intense work, 5 min break afterwards)
 
 
 
-            ///// Implementing Pomodoro-Intervals (25min of intense work, 5 min break afterwards)
+                println!("Let's start with task: {}! Pomodoro {} has begun.", t.name, pomodoro_count);
+                notify_rust::Notification::new()
+                    .summary(&format!("It's time to work! Let's start with task: {}.", t.name))
+                    .body("25 minutes of focused work starting now!")
+                    .icon("alarm-clock") // Standard Ubuntu icon name
+                    .timeout(0)          // 0 means the notification won't disappear until clicked
+                    .show()
+                    .unwrap();
 
-            let task_duration = calculate_time_duration(t.beginning, t.end);
+                let mut pomodoro_start = now; //initial start value
+                let pomodoro_duration = 5;
+                let pause_duration = 2;
 
-            if task_duration % NaiveTime::Duration::minutes(30) == 0 && !pomodoro_start_reminder_sent {
+                while now > t.beginning && now < t.end {
 
-               println!("Pomodoro {} over!", pom_number);
+                    let now = chrono::Local::now().time();
+
+                    let pomodoro_end = pomodoro_start + chrono::Duration::seconds(pomodoro_duration);
+
+                    if now >= pomodoro_end && !pomodoro_pause_reminder_sent {
+                        println!("Pomodoro over! 5 minutes of pause starting now.");
                         notify_rust::Notification::new()
-                        .summary(&format!("Pomodoro {} is over!", t.name))
-                        .body("25 minutes of work starting now!")
-                        .icon("alarm-clock") // Standard Ubuntu icon name
-                        .timeout(0)          // 0 means the notification won't disappear until clicked
-                        .show()
-                        .unwrap();
+                            .summary(&format!("Pomodoro over! 5 minutes of pause starting now."))
+                            .body("Move a little bit, get some water...")
+                            .icon("alarm-clock") // Standard Ubuntu icon name
+                            .timeout(0)          // 0 means the notification won't disappear until clicked
+                            .show()
+                            .unwrap();
 
-                        pom_number += 1;
-                        pomodoro_start_reminder_sent = true; // only send this reminder once per pomodoro
+                        // resetting flags
+                        pomodoro_pause_reminder_sent = true;
+                        pomodoro_start_reminder_sent = false;
+
+                        pomodoro_count = pomodoro_count + 1;
+                        total_pomodoro_count = total_pomodoro_count + 1;
+                    }
+
+                    let pause_end = pomodoro_end + chrono::Duration::seconds(pause_duration);
+
+
+                    if now >= pause_end && !pomodoro_start_reminder_sent {
+                        println!("Let's continue with task: {}!", t.name);
+                        notify_rust::Notification::new()
+                            .summary(&format!("It's time to work! Let's continue with task: {}. Pomodoro {} begins now", t.name, pomodoro_count))
+                            .body("25 minutes of focused work starting now!")
+                            .icon("alarm-clock") // Standard Ubuntu icon name
+                            .timeout(0)          // 0 means the notification won't disappear until clicked
+                            .show()
+                            .unwrap();
+                            pomodoro_start = now;
+
+                        pomodoro_start_reminder_sent = true;
+                        pomodoro_pause_reminder_sent = false;
+                    }
+                }
+
             }
-            else {
-                pomodoro_start_reminder_sent = false;
-            }
-
-
-
-
-
-        }
-
-
-
 
 
 
@@ -300,5 +331,6 @@ fn main() {
 
         // 3. Wait a bit before checking again to save CPU
         thread::sleep(std::time::Duration::from_secs(1));
-        }
+    }
+}
 }
