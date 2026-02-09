@@ -1,6 +1,6 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use notify_rust;
-use std::{thread, io};
+use std::{thread, io, time};
 use std::process::Command;
 
 
@@ -64,7 +64,7 @@ fn main() {
         end: chrono::NaiveTime,
     }
 
-    println!("What is the name of a task that you want to accomplish today? Write its name below in alphabet letters and underscores. Type <skip> to end input");
+    println!("What is the name of a task that you want to accomplish today? Write its name below in alphabet letters and underscores. Type <finish> to end input");
 
     // the first task is added to the 'tasks' vector as a starting value
     let mut task_name_input = String::new();
@@ -92,7 +92,13 @@ fn main() {
 
     let mut input_finished = false;
 
-    // entering loop
+
+
+
+
+
+    ////////////////////  entering query-loop //////////////////
+    // query loop should only be active until the user types "finish"
     while !input_finished {
 
         println!("What would be the another task? Write its name below in alphabet letters and underscores. Type <finish> to end input.");
@@ -107,7 +113,6 @@ fn main() {
 
         if task_name_input == "finish" {
             input_finished = true;
-            break;
         }
         else {
 
@@ -128,55 +133,115 @@ fn main() {
 
 
 
-
-
-    // Creating flags to avoid flickering bug
+    // Creating various flags
     let mut key_time_1_over = false;
     let mut key_time_2_over = false;
     let mut key_time_3_over = false;
-    let mut reminder_sent = false;
+    let mut bedtime_reminder_sent = false;
 
-    // main-loop
+    let mut task_beginning_reminder_sent = false;
+    let mut task_end_reminder_sent = false;
+
+    let mut pomodoro_start_reminder_sent = false;
+    let mut pomodoro_start_reminder_sent = false;
+    let mut pom_number: u16 = 1;
+
+    let mut current_screen_temp = "6500";
+
+
+
+
+    /////////////////////  main-loop //////////////////////
     loop {
         let now = chrono::Local::now().time();
 
-        let mut task_index = 0;
-
         for (task_index, t) in tasks.iter().enumerate() {
 
-            if now >= t.beginning {
+            if now >= t.beginning && !task_beginning_reminder_sent {
                 println!("Task {} started!", t.name);
+                pom_number = 1;
 
                 notify_rust::Notification::new()
-                .summary(&format!("Stop everything! It's time to do this task now: {}", t.name))
-                .body("Bedtime is in 1 hour!")
+                .summary("Stop everything!")
+                .body(&format!("It's time to do this task now: {}", t.name))
                 .icon("alarm-clock") // Standard Ubuntu icon name
                 .timeout(0)          // 0 means the notification won't disappear until clicked
                 .show()
                 .unwrap();
-            }
+                task_beginning_reminder_sent = true;
+                }
 
+            // if there is a "next task", announce it to the user
+            // get() safely accesses the next task, to prevent overflow
             let next_task_option = tasks.get(task_index + 1);
 
-            if now >= t.end {
-                
+            if now >= t.end && !task_end_reminder_sent {
+
                 match next_task_option {
 
-                println!("Task {} has ended!", t.name);
-                notify_rust::Notification::new()
-                .summary(&format!("Time for task {} is over. The next task will be {} and it  will begin at {}.", 
-                    t.name,
-                    next_task.name,
-                    next_task.beginning
-                    ))
-                .body("Bedtime is in 1 hour!")
-                .icon("alarm-clock") // Standard Ubuntu icon name
-                .timeout(0)          // 0 means the notification won't disappear until clicked
-                .show()
-                .unwrap();
+                    Some(next) => {
+
+                        println!("Task {} has ended!", t.name);
+                        notify_rust::Notification::new()
+                        .summary(&format!("Time for task {} is over.", t.name))
+                        .body(&format!("The next task will be {} and it  will begin at {}.", next.name, next.beginning))
+                        .icon("alarm-clock") // Standard Ubuntu icon name
+                        .timeout(0)          // 0 means the notification won't disappear until clicked
+                        .show()
+                        .unwrap();
+
+                        task_end_reminder_sent = true;
+                    },
+                    None => {
+                        println!("Task {} has ended!", t.name);
+                        notify_rust::Notification::new()
+                        .summary(&format!("Time for task {} is over. No more tasks today!", t.name))
+                        .icon("alarm-clock") // Standard Ubuntu icon name
+                        .timeout(0)          // 0 means the notification won't disappear until clicked
+                        .show()
+                        .unwrap();
+                        task_end_reminder_sent = true;
+                    }
+
+                }
+                // letting the screen blink in red for a short time
+                for elem in 0..4 {
+                        set_xsct("1000");
+                        std::thread::sleep(time::Duration::from_millis(300));
+                        set_xsct(current_screen_temp);
+                        std::thread::sleep(time::Duration::from_millis(300));
+ 
+                    }
             }
 
-        task_index += 1;
+
+
+            ///// Implementing Pomodoro-Intervals (25min of intense work, 5 min break afterwards)
+
+            let task_duration = calculate_time_duration(t.beginning, t.end);
+
+            if task_duration % NaiveTime::Duration::minutes(30) == 0 && !pomodoro_start_reminder_sent {
+
+               println!("Pomodoro {} over!", pom_number);
+                        notify_rust::Notification::new()
+                        .summary(&format!("Pomodoro {} is over!", t.name))
+                        .body("25 minutes of work starting now!")
+                        .icon("alarm-clock") // Standard Ubuntu icon name
+                        .timeout(0)          // 0 means the notification won't disappear until clicked
+                        .show()
+                        .unwrap();
+
+                        pom_number += 1;
+                        pomodoro_start_reminder_sent = true; // only send this reminder once per pomodoro
+            }
+            else {
+                pomodoro_start_reminder_sent = false;
+            }
+
+
+
+
+
         }
 
 
@@ -184,37 +249,32 @@ fn main() {
 
 
 
+        /////////////// Bedtime-logic ///////////////
 
-
-
-
-
-
-
-
-        // "Shadowing" feature in Rust
         let duration_until_bedtime = calculate_time_duration(bedtime, now);
         let duration_until_bedtime = duration_until_bedtime.num_seconds();
-
 
         // only execute if flag is false
         if duration_until_bedtime <= 12 && duration_until_bedtime > 9 && !key_time_1_over {
             set_xsct("4000");
             key_time_1_over = true;
+            current_screen_temp = "4000";
         }
 
         if duration_until_bedtime <= 9 && duration_until_bedtime > 6 && !key_time_2_over {
             set_xsct("3000");
             key_time_2_over = true;
+            current_screen_temp = "3000";
         }
 
         if duration_until_bedtime <= 6 && !key_time_3_over {
             set_xsct("2000");
             key_time_3_over = true;
+            current_screen_temp = "2000";
         }
 
         // Sending reminder
-        if duration_until_bedtime <=3 && !reminder_sent {
+        if duration_until_bedtime <=3 && !bedtime_reminder_sent {
             notify_rust::Notification::new()
                 .summary("Bedtime-Reminder")
                 .body("Bedtime is in 1 hour!")
@@ -222,7 +282,7 @@ fn main() {
                 .timeout(0)          // 0 means the notification won't disappear until clicked
                 .show()
                 .unwrap();
-            reminder_sent = true;
+            bedtime_reminder_sent = true;
         }
 
         if now >= bedtime {
@@ -240,5 +300,5 @@ fn main() {
 
         // 3. Wait a bit before checking again to save CPU
         thread::sleep(std::time::Duration::from_secs(1));
-    }
+        }
 }
