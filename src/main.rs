@@ -65,33 +65,10 @@ fn main() {
         end: chrono::NaiveTime,
     }
 
-    println!("What is the name of a task that you want to accomplish today? Write its name below in alphabet letters and underscores. Type <finish> to end input");
+    let mut tasks: Vec<Task> = vec![];
+    let mut task_names: Vec<String> = vec![];
 
-    // the first task is added to the 'tasks' vector as a starting value
-    let mut task_name_input = String::new();
 
-    io::stdin()
-        .read_line(&mut task_name_input)
-        .expect("Failed to read line. Only alphabet letters and underscores are allowed.");
-
-    let task_name_input = task_name_input.trim();
-
-    println!("What should be its beginning time? Enter in format HH:MM");
-    let task_beginning_time = time_from_input();
-
-    println!("What should be its end time? Enter in format HH:MM");
-    let task_end_time = time_from_input();
-
-    let first_task = Task {
-        name: task_name_input.to_string(),
-        beginning: task_beginning_time,
-        end: task_end_time,
-    };
-
-    // putting first task into a vector (appending it later with other tasks)
-    let mut tasks: Vec<Task> = vec![first_task];
-
-    let mut input_finished = false;
 
 
 
@@ -100,9 +77,12 @@ fn main() {
 
     ////////////////////  entering query-loop //////////////////
     // query loop should only be active until the user types "finish"
-    while !input_finished {
 
-        println!("What would be the another task? Write its name below in alphabet letters and underscores. Type <finish> to end input.");
+    println!("What is the name of a task that you want to accomplish today? Write its name below in alphabet letters and underscores. Type <finish> to end input");
+
+    let mut input_finished = false;
+
+    while !input_finished {
 
         let mut task_name_input = String::new();
 
@@ -129,40 +109,51 @@ fn main() {
             end: task_end_time,
         };
 
+        println!("What would be the another task? Write its name below in alphabet letters and underscores. Type <finish> to end input.");
+        task_names.push(current_task.name.clone());
         tasks.push(current_task);
-        }}
+        }
+    }
+
+    println!("Tasks for today: {:?}", task_names);
 
 
 
-    // Creating various flags
+    // creating various flags
     let mut key_time_1_over = false;
     let mut key_time_2_over = false;
     let mut key_time_3_over = false;
     let mut bedtime_reminder_sent = false;
 
-    let mut task_beginning_reminder_sent = false;
-    let mut task_end_reminder_sent = false;
+    // vector stores procedurally generated flags for individual tasks
+    let mut task_beginning_reminder_sent: Vec<bool> = vec![false; tasks.len()];
+    let mut task_end_reminder_sent: Vec<bool> = vec![false; tasks.len()];
 
     let mut pomodoro_start_reminder_sent = false;
     let mut pomodoro_pause_reminder_sent = false;
-    let mut pomodoro_count: u16 = 1; //printed out from the beginning, so value is 1
-    let mut total_pomodoro_count: u16 = 0;
 
+    // numeric flags
+    let mut pomodoro_count: u16 = 1;
+    let mut total_pomodoro_count: u16 = 0;
     let mut current_screen_temp = "6500";
 
 
 
 
-    /////////////////////  main-loop //////////////////////
+    ///////////////////// entering main-loop //////////////////////
     loop {
         let now = chrono::Local::now().time();
 
         for (task_index, t) in tasks.iter().enumerate() {
 
-            if now >= t.beginning && !task_beginning_reminder_sent {
-                println!("Task {} started!", t.name);
+            // Shadowing "now" inside the for-loop to update to current time
+            let now = chrono::Local::now().time();
 
 
+            // begin task
+            if now > t.beginning && now < t.end && !task_beginning_reminder_sent[task_index] {
+
+                println!("Task started: {}", t.name);
                 notify_rust::Notification::new()
                 .summary("Stop everything!")
                 .body(&format!("It's time to do this task now: {}", t.name))
@@ -170,60 +161,16 @@ fn main() {
                 .timeout(0)          // 0 means the notification won't disappear until clicked
                 .show()
                 .unwrap();
-                task_beginning_reminder_sent = true;
-            }
-
-            // if there is a "next task", announce it to the user
-            // get() safely accesses the next task, to prevent overflow
-            let next_task_option = tasks.get(task_index + 1);
-
-            if now >= t.end && !task_end_reminder_sent {
-
-                match next_task_option {
-
-                    Some(next) => {
-
-                        println!("Task {} has ended!", t.name);
-                        notify_rust::Notification::new()
-                        .summary(&format!("Time for task {} is over. Time for 15 min. of workout or meditation.", t.name))
-                        .body(&format!("The next task will be {} and it  will begin at {}.", next.name, next.beginning))
-                        .icon("alarm-clock") // Standard Ubuntu icon name
-                        .timeout(0)          // 0 means the notification won't disappear until clicked
-                        .show()
-                        .unwrap();
-                    },
-
-                    None => {
-                        println!("Task {} has ended!", t.name);
-                        notify_rust::Notification::new()
-                        .summary(&format!("Time for task {} is over. No more tasks today!", t.name))
-                        .icon("alarm-clock") // Standard Ubuntu icon name
-                        .timeout(0)          // 0 means the notification won't disappear until clicked
-                        .show()
-                        .unwrap();
-                    }
-                }
-
-                task_end_reminder_sent = true;
-
-                // letting the screen blink in red for a short time
-                for elem in 0..4 {
-                        set_xsct("1000");
-                        std::thread::sleep(time::Duration::from_millis(300));
-                        set_xsct(current_screen_temp);
-                        std::thread::sleep(time::Duration::from_millis(300));
-
-                    }
+                task_beginning_reminder_sent[task_index] = true;
 
 
-                // Implementing Pomodoro-Intervals (25min of intense work, 5 min break afterwards)
 
-
+                ///// Pomodoro-Logic (25min of intense work, 5 min break afterwards)
 
                 println!("Let's start with task: {}! Pomodoro {} has begun.", t.name, pomodoro_count);
                 notify_rust::Notification::new()
                     .summary(&format!("It's time to work! Let's start with task: {}.", t.name))
-                    .body("25 minutes of focused work starting now!")
+                    .body("Pomodoro has begun: 25 minutes of focused work starting now!")
                     .icon("alarm-clock") // Standard Ubuntu icon name
                     .timeout(0)          // 0 means the notification won't disappear until clicked
                     .show()
@@ -232,14 +179,19 @@ fn main() {
                 let mut pomodoro_start = now; //initial start value
                 let pomodoro_duration = 5;
                 let pause_duration = 2;
+                let long_pause_duration = 7; // will be implemented later
 
-                while now > t.beginning && now < t.end {
+                loop {
 
                     let now = chrono::Local::now().time();
 
+                    if now > t.end {
+                        break;
+                    }
+
                     let pomodoro_end = pomodoro_start + chrono::Duration::seconds(pomodoro_duration);
 
-                    if now >= pomodoro_end && !pomodoro_pause_reminder_sent {
+                    if now > pomodoro_end && !pomodoro_pause_reminder_sent {
                         println!("Pomodoro over! 5 minutes of pause starting now.");
                         notify_rust::Notification::new()
                             .summary(&format!("Pomodoro over! 5 minutes of pause starting now."))
@@ -260,7 +212,7 @@ fn main() {
                     let pause_end = pomodoro_end + chrono::Duration::seconds(pause_duration);
 
 
-                    if now >= pause_end && !pomodoro_start_reminder_sent {
+                    if now > pause_end && !pomodoro_start_reminder_sent {
                         println!("Let's continue with task: {}!", t.name);
                         notify_rust::Notification::new()
                             .summary(&format!("It's time to work! Let's continue with task: {}. Pomodoro {} begins now", t.name, pomodoro_count))
@@ -271,13 +223,74 @@ fn main() {
                             .unwrap();
                             pomodoro_start = now;
 
+                        // resetting flags
                         pomodoro_start_reminder_sent = true;
                         pomodoro_pause_reminder_sent = false;
                     }
-                }
 
+                    // save CPU time
+                    thread::sleep(std::time::Duration::from_secs(1));
+                }
             }
 
+            else if now < t.beginning {
+                // reset flag to false if "now" is before task beginning time
+                task_beginning_reminder_sent[task_index] = false;
+            }
+
+
+            // at the end of each task, make a longer break
+            // if there is a next task, announce it to the user
+            // if  not, abandon the task logic
+            // get() safely accesses the next task, to prevent overflow
+
+            if now > t.end && !task_end_reminder_sent[task_index] {
+
+                println!("DEBUG: Task {} (index {}) END triggered at {}", t.name, task_index, now);
+
+                // letting the screen blink in red for a short time
+                for _ in 0..4 {
+                        set_xsct("1000");
+                        thread::sleep(time::Duration::from_millis(200));
+                        set_xsct(current_screen_temp);
+                        thread::sleep(time::Duration::from_millis(200));
+                    }
+
+                let next_task_option = tasks.get(task_index + 1);
+                match next_task_option {
+
+                    Some(next) => {
+
+                        println!("Task {} has ended! 15 minutes pause.", t.name);
+                        notify_rust::Notification::new()
+                        .summary(&format!("Time for task {} is over. Time for 15 min. of workout or meditation.", t.name))
+                        .body(&format!("The next task will be {} and it  will begin at {}.", next.name, next.beginning))
+                        .icon("alarm-clock") // Standard Ubuntu icon name
+                        .timeout(0)          // 0 means the notification won't disappear until clicked
+                        .show()
+                        .unwrap();
+                    },
+
+                    None => {
+                        println!("Task {} has ended! No more tasks scheduled for today.", t.name);
+                        notify_rust::Notification::new()
+                        .summary(&format!("Time for task {} is over. No more tasks today!", t.name))
+                        .icon("alarm-clock") // Standard Ubuntu icon name
+                        .timeout(0)          // 0 means the notification won't disappear until clicked
+                        .show()
+                        .unwrap();
+                    }
+                }
+
+                task_end_reminder_sent[task_index] = true;
+                task_beginning_reminder_sent[task_index] = false;
+            }
+
+            // reset end-flag after the next task has started
+            else if now < t.beginning {
+                task_end_reminder_sent[task_index] = false;
+            }
+        }
 
 
         /////////////// Bedtime-logic ///////////////
@@ -332,5 +345,4 @@ fn main() {
         // 3. Wait a bit before checking again to save CPU
         thread::sleep(std::time::Duration::from_secs(1));
     }
-}
 }
