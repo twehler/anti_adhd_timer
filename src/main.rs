@@ -165,6 +165,7 @@ fn main() {
                     println!("Task started: {}", t.name);
                     notify_rust::Notification::new()
                     // & because format!() marcro returns String, but summary expects slice:
+                    .appname("Anti-ADHD Timer")
                     .summary(&format!("Task started: {}", t.name))
                     .icon("alarm-clock") // Standard Ubuntu icon name
                     .timeout(0)          // 0 means the notification won't disappear until clicked
@@ -183,6 +184,7 @@ fn main() {
                     // start Pomodoro
                     println!("Pomodoro {} of task {} has begun!", pomodoro_count, t.name);
                     notify_rust::Notification::new()
+                        .appname("Anti-ADHD Timer")
                         .summary(&format!("Pomodoro {} of task {} has begun!.", pomodoro_count, t.name))
                         .body("25 minutes of focused work starting now!")
                         .icon("alarm-clock") // Standard Ubuntu icon name
@@ -212,12 +214,22 @@ fn main() {
                 if now > pomodoro_end && pomodoro_count % 3 != 0 && !pomodoro_pause_reminder_sent {
                     println!("Pomodoro over! 5 minutes of pause starting now.");
                     notify_rust::Notification::new()
+                        .appname("Anti-ADHD Timer")
                         .summary(&format!("Pomodoro over! 5 minutes of pause starting now."))
                         .body("Move a little bit, get some water...")
                         .icon("alarm-clock") // Standard Ubuntu icon name
                         .timeout(0)          // 0 means the notification won't disappear until clicked
                         .show()
                         .unwrap();
+
+                    // Let the screen blink in blue for a short time
+                    for _ in 0..3 {
+                        set_xsct("12000");
+                        thread::sleep(time::Duration::from_millis(200));
+                        set_xsct(current_screen_temp);
+                        thread::sleep(time::Duration::from_millis(200));
+                    }
+
 
                     // resetting pomodoro start
                     pomodoro_start = now + chrono::Duration::minutes(small_break_duration);
@@ -235,12 +247,20 @@ fn main() {
                if now > pomodoro_end && pomodoro_count % 3 == 0 && !pomodoro_pause_reminder_sent {
                     println!("Pomodoro over! Long break of 10 minutes starting now!");
                     notify_rust::Notification::new()
+                        .appname("Anti-ADHD Timer")
                         .summary(&format!("Pomodoro over! Long break of 10 minutes starting now!."))
                         .body("Move a little more, hydrate or meditate for a short time.")
                         .icon("alarm-clock") // Standard Ubuntu icon name
                         .timeout(0)          // 0 means the notification won't disappear until clicked
                         .show()
                         .unwrap();
+
+                    for _ in 0..3 {
+                        set_xsct("12000");
+                        thread::sleep(time::Duration::from_millis(200));
+                        set_xsct(current_screen_temp);
+                        thread::sleep(time::Duration::from_millis(200));
+                    }
 
                     // resetting pomodoro start
                     pomodoro_start = now + chrono::Duration::minutes(long_break_duration);
@@ -262,7 +282,7 @@ fn main() {
 
                 // letting the screen blink in red for a short time
                 for _ in 0..4 {
-                        set_xsct("1000");
+                        set_xsct("1300");
                         thread::sleep(time::Duration::from_millis(200));
                         set_xsct(current_screen_temp);
                         thread::sleep(time::Duration::from_millis(200));
@@ -278,10 +298,11 @@ fn main() {
 
                     Some(next) => {
 
-                        println!("Task {} has ended! 15 minutes pause.", t.name);
+                        println!("Task {} has ended!", t.name);
                         notify_rust::Notification::new()
-                        .summary(&format!("Time for task {} is over. Time for 15 min. of workout or meditation.", t.name))
-                        .body(&format!("The next task will be {} and it  will begin at {}.", next.name, next.beginning))
+                        .appname("Anti-ADHD Timer")
+                        .summary(&format!("Time for task {} is over. Prepare for next task: {}", t.name, next.name))
+                        .body(&format!("The next task will begin at {}.", next.beginning))
                         .icon("alarm-clock") // Standard Ubuntu icon name
                         .timeout(0)          // 0 means the notification won't disappear until clicked
                         .show()
@@ -291,6 +312,7 @@ fn main() {
                     None => {
                         println!("Task {} has ended! No more tasks scheduled for today.", t.name);
                         notify_rust::Notification::new()
+                        .appname("Anti-ADHD Timer")
                         .summary(&format!("Time for task {} is over. No more tasks today!", t.name))
                         .body(&format!("Number of today's pomodoros: {}", total_pomodoro_count))
                         .icon("alarm-clock") // Standard Ubuntu icon name
@@ -348,6 +370,7 @@ fn main() {
         // Sending reminder
         if duration_until_bedtime <=60 && !bedtime_reminder_sent {
             notify_rust::Notification::new()
+                .appname("Anti-ADHD Timer")
                 .summary("Bedtime-Reminder")
                 .body("Bedtime is in 1 hour!")
                 .icon("alarm-clock") // Standard Ubuntu icon name
@@ -359,6 +382,7 @@ fn main() {
 
         if now >= bedtime {
             notify_rust::Notification::new()
+                .appname("Anti-ADHD Timer")
                 .summary("Go to sleep! Your tomorrow-self will thank you.")
                 .icon("alarm-clock") // Standard Ubuntu icon name
                 .timeout(0)          // 0 means the notification won't disappear until clicked
