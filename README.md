@@ -1,7 +1,7 @@
 SUMMARY:
 
-This application combines two functionalities: Holding you accountable for your tasks and radically fixing your bed-routine.
-
+This application combines two functionalities: Holding you accountable for your tasks and radically fixing your bed-routine. This is being done with changing screen colors and notifications.
+ 
 
 
 HOW TO USE:
