@@ -1,8 +1,9 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use notify_rust;
-use std::{thread, io, time};
+use std::{thread, time};
 use std::process::Command;
-
+use std::fs::File;
+use std::io::{self, BufRead};
 
 fn set_xsct(temp: &str) {
     Command::new("xsct")
@@ -64,56 +65,66 @@ fn main() {
         end: chrono::NaiveTime,
     }
 
+
+
+
+    let mut file_path = String::new();
+
+    // reading input & removing white spaces
+    println!("Please enter the location of the .txt file describing the day-plan:");
+    io::stdin()
+        .read_line(&mut file_path)
+        .expect("Failed to read line. Only alphabet letters and underscores are allowed.");
+    let file_path = file_path.trim();
+
+    let file = File::open(file_path).expect("File not found.");
+    let reader = io::BufReader::new(file);
+
     let mut tasks: Vec<Task> = vec![];
     let mut task_names: Vec<String> = vec![];
 
+    for line in reader.lines() {
+        // Unwrap the Result to get the actual String
+        let line_content = line.expect("Could not read line from file");
+        let line_content = line_content.trim();
 
+        // Skip empty lines to prevent crashes
+        if line_content.is_empty() { continue; }
 
+        let line_parts: Vec<&str> = line_content.split('-').collect();
 
-    ////////////////////  entering task-input-loop //////////////////
-    // should be active until the user types "finish"
-
-    println!("What is the name of a task that you want to accomplish today? Write its name below in alphabet letters and underscores. Type <finish> to end input");
-
-    let mut input_finished = false;
-
-    while !input_finished {
-
-        let mut task_name_input = String::new();
-
-        // reading input & removing white spaces
-        io::stdin()
-            .read_line(&mut task_name_input)
-            .expect("Failed to read line. Only alphabet letters and underscores are allowed.");
-        let task_name_input = task_name_input.trim();
-
-        if task_name_input == "finish" {
-            input_finished = true;
+        // Safety check: ensure the line has 3 parts (Start-End-Name)
+        if line_parts.len() < 3 {
+            panic!("Line could not be parsed: {}", line_content);
         }
-        else {
 
-        println!("What should be its beginning time? Enter in format HH:MM");
-        let task_beginning_time = time_from_input();
+        // Parse the name
+        let task_name = line_parts[2].to_string();
 
-        println!("What should be its end time? Enter in format HH:MM");
-        let task_end_time = time_from_input();
+        // Split and parse the times
+        let beginning_parts: Vec<&str> = line_parts[0].trim().split(':').collect();
+        let end_parts: Vec<&str> = line_parts[1].trim().split(':').collect();
+
+        let b_hour: u32 = beginning_parts[0].parse().expect("Invalid hour");
+        let b_min: u32 = beginning_parts[1].parse().expect("Invalid minute");
+        let e_hour: u32 = end_parts[0].parse().expect("Invalid hour");
+        let e_min: u32 = end_parts[1].parse().expect("Invalid minute");
+
+        let task_beginning = NaiveTime::from_hms_opt(b_hour, b_min, 0).unwrap();
+        let task_end = NaiveTime::from_hms_opt(e_hour, e_min, 0).unwrap();
 
         let current_task = Task {
-            name: task_name_input.to_string(), // convert the slice task_name_input to a String
-            beginning: task_beginning_time,
-            end: task_end_time,
+            name: task_name.clone(),
+            beginning: task_beginning,
+            end: task_end,
         };
 
-        println!("What would be the another task? Write its name below in alphabet letters and underscores. Type <finish> to end input.");
-
-        // create vectors with all task names
-        // after this, push all tasks into another vector
-        task_names.push(current_task.name.clone());
+        task_names.push(task_name);
         tasks.push(current_task);
-        }
     }
 
-    println!("Tasks for today: {:?}", task_names);
+
+    println!("Your day-plan is now being tracked. Tasks for today: {:?}", task_names);
 
 
     // creating various flags
