@@ -1,7 +1,6 @@
 SUMMARY:
 
-This application combines two functionalities: Holding you accountable for your tasks and radically fixing your bed-routine. This is being done with changing screen colors and notifications.
- 
+This application combines two functionalities: Holding you accountable for your tasks and fixing your bedtime in a healthy way, with you being in 100% control over everything!
 
 
 HOW TO USE:
@@ -21,4 +20,6 @@ HOW TO USE:
 
 2. Execute the binary file inside the terminal, specify your bedtime and give the location of the .txt file. The timer will
    also take care of your bedtime, by setting reminders and decreasing the color-temperature of the screen with xsct step by step.
-   If bedtime has arrived, the screen will become monochrome-red, rendering it half-useless (you can still use it, but it will be unpleasant)
+   If bedtime has arrived, the screen will become monochrome-red, rendering it half-useless (you can still use it, but it will be unpleasant).
+   This leads to a radical, but non-damaging and very effective bedtime-fix for people with ADHD, which increases life-quality overall and decreases ADHD-symptoms!
+   But of course it is also highly useful for neurotypical people.
