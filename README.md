@@ -7,11 +7,11 @@ HOW TO USE:
 
 1. Specify your plans for the day inside a .txt file in the following format:
   
-    07:00 - 08:00 - Task1
+    07:00 - 08:00 - Task 1 (here you can write any character you want)
     
-    08:15 - 10:00 - Task2
+    08:15 - 10:00 - Task 2
     
-    10:00 - 15:35 - Task3
+    10:00 - 15:35 - Task 3
     
     etc...
 
