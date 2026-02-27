@@ -18,7 +18,7 @@ fn set_xsct(temp: &str) {
 
 // Function calculates duration between NaiveTime objects while wrapping around midnight
 fn calculate_time_duration(start: NaiveTime, end: NaiveTime) -> chrono::Duration {
-    let today = NaiveDate::from_ymd_opt(2026, 2, 9).unwrap(); // example fixed date
+    let today = chrono::Local::now().date_naive();
 
     let start_dt = NaiveDateTime::new(today, start);
     let mut end_dt = NaiveDateTime::new(today, end);
@@ -42,12 +42,15 @@ fn time_from_input() -> NaiveTime {
 
     let input = raw_input.trim();
     let parts: Vec<&str> = input.split(':').collect();
-    let hour: u32 = parts[0].parse().expect("Hour is not a number!");
-    let minute: u32 = parts[1].parse().expect("Minute is not a number!");
 
     if parts.len() != 2 {
         panic!("Input must be in format HH:MM");
     }
+
+    let hour: u32 = parts[0].parse().expect("Hour is not a number!");
+    let minute: u32 = parts[1].parse().expect("Minute is not a number!");
+
+
 
     NaiveTime::from_hms_opt(hour, minute, 0).unwrap()
 }
@@ -69,9 +72,12 @@ fn force_pomodoro_report(report_file_path: &str) {
     // check if the user has Windows, Linux or MacOS (for future porting)
     let status = if cfg!(target_os = "windows") {
         Command::new("notepad.exe").arg(&report_file_path).status()
+
     } else if cfg!(target_os = "macos") {
         Command::new("open").arg("-a").arg("TextEdit").arg(&report_file_path).status()
+
     } else {
+
         // Use xdg-open for better Linux compatibility, or stick to mousepad
         let mut child = Command::new("mousepad")
             .arg(&report_file_path)
@@ -85,28 +91,45 @@ fn force_pomodoro_report(report_file_path: &str) {
         // Get the PID of the mousepad process and find its window ID via wmctrl
         let pid = child.id(); // returns the PID as u32
 
-        // wmctrl -l -p lists all windows with their PIDs
-        let wmctrl_output = Command::new("wmctrl")
-            .args(["-l", "-p"])
-            .output()
-            .expect("Cannot run wmctrl.");
 
-        let output_str = String::from_utf8_lossy(&wmctrl_output.stdout);
+        let window_id_owned: String;
+        let mut found = false;
 
-        // Find the line whose PID matches our mousepad process
-        let window_id = output_str.lines()
-            .find(|line| line.contains(&pid.to_string()))
-            .and_then(|line| line.split_whitespace().next())
-            .expect("Could not find mousepad window ID.");
+        for _ in 0..10 {
+            thread::sleep(time::Duration::from_millis(500));
 
-        // raise exactly that window by ID using -i
-        Command::new("wmctrl")
-            .args(["-i", "-r", window_id, "-b", "add,above"])
-            .status()
-            .expect("wmctrl failed.");
+            let wmctrl_output = Command::new("wmctrl")
+                .args(["-l", "-p"])
+                .output()
+                .expect("Cannot run wmctrl.");
 
-        // wait for the editor to close
+            let output_str = String::from_utf8_lossy(&wmctrl_output.stdout);
+
+            // Match on the third whitespace-separated column (the PID) specifically
+            let found_line = output_str.lines().find(|line| {
+                let cols: Vec<&str> = line.split_whitespace().collect();
+                cols.get(2).map_or(false, |&p| p == pid.to_string())
+            });
+
+            if let Some(line) = found_line {
+                window_id_owned = line.split_whitespace().next().unwrap().to_string();
+                found = true;
+
+                Command::new("wmctrl")
+                    .args(["-i", "-r", &window_id_owned, "-b", "add,above"])
+                    .status()
+                    .expect("wmctrl failed.");
+
+                break;
+            }
+        }
+
+        if !found {
+            eprintln!("Warning: Could not find Mousepad window to bring to front, continuing anyway.");
+        }
+
         child.wait()
+
 
     };
 
@@ -219,6 +242,8 @@ fn main() {
     let mut pomodoro_end = pomodoro_start + chrono::Duration::minutes(pomodoro_duration);
     let small_break_duration = 5;
     let long_break_duration = 10;
+    let mut small_break_active = false;
+    let mut long_break_active = false;
 
 
     // Creating path for Pomodoro-report-file
@@ -228,8 +253,6 @@ fn main() {
     ///////////////////// entering main-loop //////////////////////
 
     loop {
-        now = chrono::Local::now().time();
-
 
         for (task_index, t) in tasks.iter().enumerate() {
 
@@ -256,10 +279,11 @@ fn main() {
                     task_end_reminder_sent[task_index] = false;
 
                     pomodoro_start = now;
+                    pomodoro_count = 1;
                     pomodoro_start_reminder_sent = false;
                     pomodoro_end = pomodoro_start + chrono::Duration::minutes(pomodoro_duration);
 
-                    pomodoro_count = 1;
+
                 }
 
 
@@ -281,6 +305,10 @@ fn main() {
 
                     pomodoro_start_reminder_sent = true;
                     pomodoro_pause_reminder_sent = false;
+                    pomodoro_end = now + chrono::Duration::minutes(pomodoro_duration);
+
+                    small_break_active = false;
+                    long_break_active = false;
                 }
 
 
@@ -315,6 +343,7 @@ fn main() {
 
                     pomodoro_count = pomodoro_count + 1;
                     total_pomodoro_count = total_pomodoro_count + 1;
+                    small_break_active = true;
 
                     force_pomodoro_report(&pomodoro_report_path);
                 }
@@ -348,8 +377,10 @@ fn main() {
 
                     pomodoro_count = pomodoro_count + 1;
                     total_pomodoro_count = total_pomodoro_count + 1;
+                    long_break_active = true;
 
                     force_pomodoro_report(&pomodoro_report_path);
+
                 }
 
                 // show how much time has elapsed until the end of the pomodoro
@@ -358,6 +389,20 @@ fn main() {
                     let pomodoro_time_elapsed = calculate_time_duration(pomodoro_start, now).num_minutes();
                     println!("Pomodoro Status: {} minutes of {} elapsed.", pomodoro_time_elapsed, pomodoro_duration);
                 }
+
+                // show how much time has elapsed until the end of the break
+                if now > pomodoro_end && pomodoro_start_reminder_sent == false && small_break_active == true {
+                    let break_time_elapsed = calculate_time_duration(pomodoro_end, now).num_minutes();
+                    println!("Small Break Status: {} minutes of {} elapsed.", break_time_elapsed, small_break_duration);
+                }
+
+
+                // show how much time has elapsed until the end of the long break
+                if now > pomodoro_end && pomodoro_start_reminder_sent == false && long_break_active == true {
+                    let break_time_elapsed = calculate_time_duration(pomodoro_end, now).num_minutes();
+                    println!("Long Break Status: {} minutes of {} elapsed.", break_time_elapsed, long_break_duration);
+                }
+
 
             }
 
