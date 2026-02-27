@@ -2,8 +2,11 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use notify_rust;
 use std::{thread, time};
 use std::process::Command;
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead};
+use std::env;
+
 
 fn set_xsct(temp: &str) {
     Command::new("xsct")
@@ -11,6 +14,7 @@ fn set_xsct(temp: &str) {
     .spawn()
     .expect("Failed to execute xsct. Is it installed?");
 }
+
 
 // Function calculates duration between NaiveTime objects while wrapping around midnight
 fn calculate_time_duration(start: NaiveTime, end: NaiveTime) -> chrono::Duration {
@@ -20,7 +24,7 @@ fn calculate_time_duration(start: NaiveTime, end: NaiveTime) -> chrono::Duration
     let mut end_dt = NaiveDateTime::new(today, end);
 
     // If end time is before start time, assume it is next day
-    if end <= start {
+    if end < start {
         end_dt = end_dt + chrono::Duration::days(1);
     }
 
@@ -50,14 +54,82 @@ fn time_from_input() -> NaiveTime {
 
 
 
+fn force_pomodoro_report(report_file_path: &str) {
+    // esure the file exists (and close the handle immediately to avoid locking)
+    {
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&report_file_path)
+            .expect("Failed to create or open the pomodoro report file.");
+    }
+
+    println!("Waiting for Pomodoro Report... Please save and close the editor to continue.");
+
+    // check if the user has Windows, Linux or MacOS (for future porting)
+    let status = if cfg!(target_os = "windows") {
+        Command::new("notepad.exe").arg(&report_file_path).status()
+    } else if cfg!(target_os = "macos") {
+        Command::new("open").arg("-a").arg("TextEdit").arg(&report_file_path).status()
+    } else {
+        // Use xdg-open for better Linux compatibility, or stick to mousepad
+        let mut child = Command::new("mousepad")
+            .arg(&report_file_path)
+            .spawn()
+            .expect("Cannot start Mousepad. Is it installed?");
+
+        // Wait a split second for the window to appear, then force it on top
+        thread::sleep(time::Duration::from_millis(500));
+        println!("Report file location: {}", &report_file_path);
+
+        // Get the PID of the mousepad process and find its window ID via wmctrl
+        let pid = child.id(); // returns the PID as u32
+
+        // wmctrl -l -p lists all windows with their PIDs
+        let wmctrl_output = Command::new("wmctrl")
+            .args(["-l", "-p"])
+            .output()
+            .expect("Cannot run wmctrl.");
+
+        let output_str = String::from_utf8_lossy(&wmctrl_output.stdout);
+
+        // Find the line whose PID matches our mousepad process
+        let window_id = output_str.lines()
+            .find(|line| line.contains(&pid.to_string()))
+            .and_then(|line| line.split_whitespace().next())
+            .expect("Could not find mousepad window ID.");
+
+        // raise exactly that window by ID using -i
+        Command::new("wmctrl")
+            .args(["-i", "-r", window_id, "-b", "add,above"])
+            .status()
+            .expect("wmctrl failed.");
+
+        // wait for the editor to close
+        child.wait()
+
+    };
+
+    // handle the editor exit status
+    match status {
+        Ok(s) if s.success() => println!("Report saved. Break starts now."),
+        Ok(_) => eprintln!("Editor closed without a success code, but continuing..."),
+        Err(e) => eprintln!("Failed to open editor: {}", e),
+    }
+}
+
+
+
 fn main() {
+
+    // passing schedule file path as an argument
+    let schedule_file_path: String = env::args().nth(1).expect("Please provide a schedule file path as an argument.");
+
     // Setting bedtime (24-hour format: hour, Minute)
-
     println!("Please enter your desired bed-time below in format HH:MM.");
-
     let bedtime = time_from_input();
-
     println!("Bedtime timer started! I'll remind you at {}.", bedtime);
+
 
     struct Task {
         name: String,
@@ -66,19 +138,14 @@ fn main() {
     }
 
 
+    let schedule_file_path = schedule_file_path.trim();
 
+    println!("Trying to open {}", schedule_file_path);
 
-    let mut file_path = String::new();
+    let schedule_file = File::open(schedule_file_path).expect("File not found.");
+    let reader = io::BufReader::new(schedule_file);
 
-    // reading input & removing white spaces
-    println!("Please enter the location of the .txt file describing the day-plan:");
-    io::stdin()
-        .read_line(&mut file_path)
-        .expect("Failed to read line. Only alphabet letters and underscores are allowed.");
-    let file_path = file_path.trim();
-
-    let file = File::open(file_path).expect("File not found.");
-    let reader = io::BufReader::new(file);
+    println!("Using {} as a schedule today. Try to stay on time! For seeing your own progress, a text-editor will open after every pomodoro in an automatically created logfile, so you can log your activities. Go smash the day!", schedule_file_path);
 
     let mut tasks: Vec<Task> = vec![];
     let mut task_names: Vec<String> = vec![];
@@ -149,9 +216,13 @@ fn main() {
 
     let mut pomodoro_start = now; // starting time of a pomodoro-unit
     let pomodoro_duration = 25;
+    let mut pomodoro_end = pomodoro_start + chrono::Duration::minutes(pomodoro_duration);
     let small_break_duration = 5;
     let long_break_duration = 10;
 
+
+    // Creating path for Pomodoro-report-file
+    let pomodoro_report_path = schedule_file_path.replace(".txt", ".log");
 
 
     ///////////////////// entering main-loop //////////////////////
@@ -169,7 +240,6 @@ fn main() {
             // check if current task is running
             if now > t.beginning && now < t.end {
 
-
                 // task beginning logic
                 if !task_beginning_reminder_sent[task_index] {
 
@@ -185,14 +255,20 @@ fn main() {
                     task_beginning_reminder_sent[task_index] = true;
                     task_end_reminder_sent[task_index] = false;
 
+                    pomodoro_start = now;
+                    pomodoro_start_reminder_sent = false;
+                    pomodoro_end = pomodoro_start + chrono::Duration::minutes(pomodoro_duration);
+
                     pomodoro_count = 1;
                 }
 
 
                 ///// Pomodoro-Logic (25min of intense work, 5 min break afterwards)
 
+
+                // Pomodoro Start
                 if now >= pomodoro_start && !pomodoro_start_reminder_sent {
-                    // start Pomodoro
+
                     println!("Pomodoro {} of task {} has begun!", pomodoro_count, t.name);
                     notify_rust::Notification::new()
                         .appname("Anti-ADHD Timer")
@@ -206,18 +282,6 @@ fn main() {
                     pomodoro_start_reminder_sent = true;
                     pomodoro_pause_reminder_sent = false;
                 }
-
-
-                let pomodoro_end = pomodoro_start + chrono::Duration::minutes(pomodoro_duration);
-
-                // show how much time has elapsed until the end of the pomodoro
-                // only show the same time once (instead of repeating the same amount of minutes every time the loop checks)
-
-                if now < pomodoro_end {
-                    let pomodoro_time_elapsed = calculate_time_duration(pomodoro_start, now).num_minutes();
-                    println!("Pomodoro Status: {} minutes of {} elapsed.", pomodoro_time_elapsed, pomodoro_duration);
-                }
-
 
 
                 // if pomodoro is over, take small break, reset pomodoro_start
@@ -251,6 +315,8 @@ fn main() {
 
                     pomodoro_count = pomodoro_count + 1;
                     total_pomodoro_count = total_pomodoro_count + 1;
+
+                    force_pomodoro_report(&pomodoro_report_path);
                 }
 
 
@@ -282,12 +348,22 @@ fn main() {
 
                     pomodoro_count = pomodoro_count + 1;
                     total_pomodoro_count = total_pomodoro_count + 1;
+
+                    force_pomodoro_report(&pomodoro_report_path);
                 }
+
+                // show how much time has elapsed until the end of the pomodoro
+                // only show the same time once (instead of repeating the same amount of minutes every time the loop checks)
+                if now < pomodoro_end && pomodoro_pause_reminder_sent == false {
+                    let pomodoro_time_elapsed = calculate_time_duration(pomodoro_start, now).num_minutes();
+                    println!("Pomodoro Status: {} minutes of {} elapsed.", pomodoro_time_elapsed, pomodoro_duration);
+                }
+
             }
 
 
 
-            ///// Task end logic
+            ///// Task end logic (if current time is outside of task time interval)
 
             if now >= t.end && !task_end_reminder_sent[task_index] {
 
@@ -335,6 +411,8 @@ fn main() {
 
                 task_end_reminder_sent[task_index] = true;
                 task_beginning_reminder_sent[task_index] = false;
+
+                force_pomodoro_report(&pomodoro_report_path);
             }
 
 
