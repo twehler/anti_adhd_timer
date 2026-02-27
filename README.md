@@ -1,6 +1,11 @@
+required packages: xsct, wmcrtl
+
+
 SUMMARY:
 
-This application combines two functionalities: Holding you accountable for your tasks and fixing your bedtime in a healthy way, with you being in 100% control over everything!
+This application combines two functionalities: Holding you accountable to a self-set schedule and fixing your bedtime in a healthy way, with you being in 100% control over everything! It also divides the time spaces into fully-fledged Pomodoro-blocks. At the end of every Pomodoro session, it openes a "log-file", where you can specify what you did during the last Pomodoro-session. This file won't disappear from the top of the screen until you close it.
+
+Despite the rigorous structure, this application will make your life very stress-free compared to before, since you can now empty your head and purely focus on your activities!
 
 
 HOW TO USE:
@@ -15,11 +20,7 @@ HOW TO USE:
     
     etc...
 
-    The timer will throw notifications and let the screen blink for a short time in order to alert the user.
-    It will also divide the task times in Pomodoro-intervals as best as possible (currently somethat bugged , but still usable)
+    The timer will throw notifications and let the screen blink for a short time in order to alert you.
 
-2. Execute the binary file inside the terminal, specify your bedtime and give the location of the .txt file. The timer will
-   also take care of your bedtime, by setting reminders and decreasing the color-temperature of the screen with xsct step by step.
-   If bedtime has arrived, the screen will become monochrome-red, rendering it half-useless (you can still use it, but it will be unpleasant).
-   This leads to a radical, but non-damaging and very effective bedtime-fix for people with ADHD, which increases life-quality overall and decreases ADHD-symptoms!
-   But of course it is also highly useful for neurotypical people.
+
+2. Execute the binary file inside the terminal, pass the txt-file as an argument. After executing, you will be asked when you want to go to bed. The program will start after the input and step-by-step take control over the screen color temperature, starting with 3 hours before bedtime. This is being handled more intensely than normal blue-light filters do, with scientifically proven kelvin-colors, which will make you sleep far beter than before. When bedtime is reached, a temperature of 1000K is being applied, making you want to go to bed.
