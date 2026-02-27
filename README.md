@@ -20,7 +20,7 @@ HOW TO USE:
     
     etc...
 
-    The timer will throw notifications and let the screen blink for a short time in order to alert you.
+    The timer will throw notifications and let the screen blink for a short time when Pomodoro-sessions or time-intervals for tasks end in order to alert you.
 
 
 2. Execute the binary file inside the terminal, pass the txt-file as an argument. After executing, you will be asked when you want to go to bed. The program will start after the input and step-by-step take control over the screen color temperature, starting with 3 hours before bedtime. This is being handled more intensely than normal blue-light filters do, with scientifically proven kelvin-colors, which will make you sleep far beter than before. When bedtime is reached, a temperature of 1000K is being applied, making you want to go to bed.
