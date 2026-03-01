@@ -151,7 +151,7 @@ fn main() {
     // Setting bedtime (24-hour format: hour, Minute)
     println!("Please enter your desired bed-time below in format HH:MM.");
     let bedtime = time_from_input();
-    println!("Bedtime timer started! I'll remind you at {}.", bedtime);
+    println!("Bedtime timer started! I'll remind you at {}. \n", bedtime);
 
 
     struct Task {
@@ -163,15 +163,20 @@ fn main() {
 
     let schedule_file_path = schedule_file_path.trim();
 
-    println!("Trying to open {}", schedule_file_path);
+
 
     let schedule_file = File::open(schedule_file_path).expect("File not found.");
     let reader = io::BufReader::new(schedule_file);
 
-    println!("Using {} as a schedule today. Try to stay on time! For seeing your own progress, a text-editor will open after every pomodoro in an automatically created logfile, so you can log your activities. Go smash the day!", schedule_file_path);
+
+    let pomodoro_duration = 25;
+    let small_break_duration = 5;
+    let long_break_duration = 10;
+
+
+    println!("Using {} as a schedule today. Try to stay on time! For seeing your own progress, a text-editor will open after every Pomodoro-session in an automatically created logfile, so you can log your activities. Pomodoro-sessions are {} minutes long, followed by a {}-minute break. After three sessions, there will be a longer break of {} minutes. Go smash the day! \n", schedule_file_path, pomodoro_duration, small_break_duration, long_break_duration);
 
     let mut tasks: Vec<Task> = vec![];
-    let mut task_names: Vec<String> = vec![];
 
     for line in reader.lines() {
         // Unwrap the Result to get the actual String
@@ -203,19 +208,31 @@ fn main() {
         let task_beginning = NaiveTime::from_hms_opt(b_hour, b_min, 0).unwrap();
         let task_end = NaiveTime::from_hms_opt(e_hour, e_min, 0).unwrap();
 
+        // collect the tasks which are noted in the schedule file
         let current_task = Task {
             name: task_name.clone(),
             beginning: task_beginning,
             end: task_end,
         };
 
-        task_names.push(task_name);
         tasks.push(current_task);
     }
 
 
-    println!("Your day-plan is now being tracked. Tasks for today: {:?}", task_names);
+    let mut now = chrono::Local::now().time();
 
+    // Filter out tasks that are already finished before we even start the timer
+    tasks.retain(|t| now < t.end);
+
+
+    println!("Your day-schedule is now being tracked. Tasks for today: \n");
+    let mut i: u8 = 1;
+    for t in &tasks {
+        println!("{}. {}, {} - {}", i, t.name, t.beginning, t.end);
+        i += 1;
+    }
+
+    println!("\n");
 
     // creating various flags
     let mut key_time_1_over = false;
@@ -235,15 +252,13 @@ fn main() {
     let mut total_pomodoro_count: u16 = 0;
     let mut current_screen_temp = "6500";
 
-    let mut now = chrono::Local::now().time();
 
     let mut pomodoro_start = now; // starting time of a pomodoro-unit
-    let pomodoro_duration = 25;
     let mut pomodoro_end = pomodoro_start + chrono::Duration::minutes(pomodoro_duration);
-    let small_break_duration = 5;
-    let long_break_duration = 10;
     let mut small_break_active = false;
     let mut long_break_active = false;
+
+    let mut loop_count: u8 = 0;
 
 
     // Creating path for Pomodoro-report-file
@@ -267,6 +282,7 @@ fn main() {
                 if !task_beginning_reminder_sent[task_index] {
 
                     println!("Task started: {}", t.name);
+                    println!("Deadline: {} \n", t.end);
                     notify_rust::Notification::new()
                     // & because format!() marcro returns String, but summary expects slice:
                     .appname("Anti-ADHD Timer")
@@ -383,24 +399,29 @@ fn main() {
 
                 }
 
-                // show how much time has elapsed until the end of the pomodoro
-                // only show the same time once (instead of repeating the same amount of minutes every time the loop checks)
-                if now < pomodoro_end && pomodoro_pause_reminder_sent == false {
-                    let pomodoro_time_elapsed = calculate_time_duration(pomodoro_start, now).num_minutes();
-                    println!("Pomodoro Status: {} minutes of {} elapsed.", pomodoro_time_elapsed, pomodoro_duration);
-                }
+                if loop_count % 3 == 0 {
 
-                // show how much time has elapsed until the end of the break
-                if now > pomodoro_end && pomodoro_start_reminder_sent == false && small_break_active == true {
-                    let break_time_elapsed = calculate_time_duration(pomodoro_end, now).num_minutes();
-                    println!("Small Break Status: {} minutes of {} elapsed.", break_time_elapsed, small_break_duration);
-                }
+                    // show how much time has elapsed until the end of the pomodoro
+                    // only show the same time once (instead of repeating the same amount of minutes every time the loop checks)
+                    if now < pomodoro_end && pomodoro_pause_reminder_sent == false {
+                        let pomodoro_time_elapsed = calculate_time_duration(pomodoro_start, now).num_minutes();
+                        println!("Pomodoro Status: {} minutes of {} elapsed.", pomodoro_time_elapsed, pomodoro_duration);
+                    }
+
+                    // show how much time has elapsed until the end of the break
+                    if now > pomodoro_end && pomodoro_start_reminder_sent == false && small_break_active == true {
+                        let break_time_elapsed = calculate_time_duration(pomodoro_end, now).num_minutes();
+                        println!("Small Break Status: {} minutes of {} elapsed.", break_time_elapsed, small_break_duration);
+                    }
 
 
-                // show how much time has elapsed until the end of the long break
-                if now > pomodoro_end && pomodoro_start_reminder_sent == false && long_break_active == true {
-                    let break_time_elapsed = calculate_time_duration(pomodoro_end, now).num_minutes();
-                    println!("Long Break Status: {} minutes of {} elapsed.", break_time_elapsed, long_break_duration);
+                    // show how much time has elapsed until the end of the long break
+                    if now > pomodoro_end && pomodoro_start_reminder_sent == false && long_break_active == true {
+                        let break_time_elapsed = calculate_time_duration(pomodoro_end, now).num_minutes();
+                        println!("Long Break Status: {} minutes of {} elapsed.", break_time_elapsed, long_break_duration);
+                    }
+
+                    loop_count = 0;
                 }
 
 
@@ -529,5 +550,6 @@ fn main() {
 
         // save CPU time
         thread::sleep(std::time::Duration::from_secs(20));
+        loop_count += 1;
     }
 }
