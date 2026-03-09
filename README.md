@@ -1,4 +1,4 @@
-required packages: xsct, wmcrtl
+required packages: xsct, wmcrtl (does NOT work for Wayland yet!)
 
 
 SUMMARY:
